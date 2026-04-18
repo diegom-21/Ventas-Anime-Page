@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useJsonStorage } from '../hooks/useJsonStorage';
 import { v4 as uuidv4 } from 'uuid';
 import { calculateSaleStatus } from '../utils/calculations';
 
 const SalesContext = createContext(null);
 
 export const SalesProvider = ({ children }) => {
-  const [sales, setSales] = useLocalStorage('anime_figures_sales', []);
+  const [sales, setSales, isLoading] = useJsonStorage([]);
 
   const addSale = (saleData) => {
     const { valor_venta, pagado } = saleData;
@@ -49,6 +49,15 @@ export const SalesProvider = ({ children }) => {
     updateSale,
     deleteSale
   }), [sales]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
+        <div className="w-14 h-14 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-slate-600 font-medium animate-pulse uppercase tracking-widest text-sm">Cargando Sistema...</p>
+      </div>
+    );
+  }
 
   return (
     <SalesContext.Provider value={value}>
