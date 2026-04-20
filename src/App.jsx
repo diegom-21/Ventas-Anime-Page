@@ -4,7 +4,7 @@ import { DashboardHeader } from './components/dashboard/DashboardHeader';
 import { SalesTable } from './components/sales/SalesTable';
 import { SalesForm } from './components/sales/SalesForm';
 import { ClientSummary } from './components/clients/ClientSummary';
-import { Plus, Package, Database } from 'lucide-react';
+import { Plus, Package, Sheet } from 'lucide-react';
 
 function Dashboard() {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -33,12 +33,13 @@ function Dashboard() {
       try {
         const result = await window.electronAPI.exportData();
         if (result && result.success) {
-          // Opcional: mostrar un feedback más elegante en el futuro, por ahora alert está bien para MVP
-          alert('¡Base de datos exportada con éxito!\nGuardada en: ' + result.filePath);
+          alert('¡Tabla de Excel exportada con éxito!\nGuardada en: ' + result.filePath);
+        } else if (result && result.error === 'BUSY') {
+          alert('⚠️ PROTECCIÓN ACTIVA:\nEl archivo de Excel ya se encuentra abierto en tu computadora.\nPor favor cierra Excel antes de exportar una nueva copia encima.');
         }
       } catch (error) {
-        console.error('Error exportando', error);
-        alert('Hubo un error al exportar la base de datos.');
+        console.error('Error exportando Excel', error);
+        alert('Hubo un error al generar el archivo Excel.');
       }
     } else {
       alert('Esta función solo está disponible en la versión de escritorio (Electron).');
@@ -59,11 +60,11 @@ function Dashboard() {
             <div className="flex gap-3">
               <button 
                 onClick={handleExport}
-                className="btn border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-sm gap-2"
-                title="Exportar Base de Datos a JSON"
+                className="btn border border-slate-200 bg-white hover:bg-emerald-50 text-slate-700 shadow-sm gap-2"
+                title="Exportar Base de Datos a Excel"
               >
-                <Database size={18} className="text-slate-500" />
-                <span className="hidden sm:inline">Exportar JSON</span>
+                <Sheet size={18} className="text-emerald-600" />
+                <span className="hidden sm:inline">Exportar Excel</span>
               </button>
               
               <button 

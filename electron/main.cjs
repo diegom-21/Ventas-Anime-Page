@@ -75,25 +75,80 @@ app.whenReady().then(() => {
   ipcMain.handle('export-data', async (event) => {
     try {
       const { canceled, filePath } = await dialog.showSaveDialog({
-        title: 'Exportar Base de Datos (JSON)',
-        defaultPath: 'NSJ_Store_VentasDB.json',
-        buttonLabel: 'Exportar',
-        filters: [{ name: 'Archivos JSON', extensions: ['json'] }]
+        title: 'Exportar Base de Datos (Excel)',
+        defaultPath: 'NSJ_Store_Ventas.xlsx',
+        buttonLabel: 'Exportar a Excel',
+        filters: [{ name: 'Archivos Excel', extensions: ['xlsx'] }]
       });
 
       if (canceled || !filePath) return { success: false, canceled: true };
 
-      let dataToExport = '[]';
+      let dataToExport = [];
       try {
-        dataToExport = await fs.readFile(dataFilePath, 'utf-8');
+        const raw = await fs.readFile(dataFilePath, 'utf-8');
+        dataToExport = JSON.parse(raw);
       } catch (err) {
         // En caso de que el archivo base no exista todavía, exportamos vacío
         if (err.code !== 'ENOENT') throw err;
       }
 
-      await fs.writeFile(filePath, dataToExport, 'utf-8');
+      // 1. Mapear los datos para Excel para que se vean increíbles y entendibles
+      const mappedData = dataToExport.map(sale => ({
+        'Fecha': sale.fecha || '-',
+        'Figura': sale.figura || '-',
+        'Cliente Real': sale.cliente_real ? sale.cliente_real.toUpperCase() : '-',
+        'Cliente Apodo': sale.cliente_apodo ? sale.cliente_apodo.toUpperCase() : '-',
+        'Valor Total': Number(sale.valor_venta) || 0,
+        'Pagado / Abono': Number(sale.pagado) || 0,
+        'Por Pagar': Number(sale.por_pagar) || 0,
+        'Estado': sale.estado ? sale.estado.toUpperCase() : '-',
+        'Comentario': sale.comentario || ''
+      }));
+
+      // 2. Transformar a Hoja de Excel con ExcelJS para añadir estilos
+      const ExcelJS = require('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Ventas');
+
+      // Definir columnas y sus anchos exactos
+      worksheet.columns = [
+        { header: 'Fecha', key: 'Fecha', width: 17 },
+        { header: 'Figura', key: 'Figura', width: 42 },
+        { header: 'Cliente Real', key: 'Cliente Real', width: 27 },
+        { header: 'Cliente Apodo', key: 'Cliente Apodo', width: 22 },
+        { header: 'Valor Total', key: 'Valor Total', width: 22 },
+        { header: 'Pagado / Abono', key: 'Pagado / Abono', width: 17 },
+        { header: 'Por Pagar', key: 'Por Pagar', width: 15 },
+        { header: 'Estado', key: 'Estado', width: 22 },
+        { header: 'Comentario', key: 'Comentario', width: 27 }
+      ];
+
+      // Añadir la información
+      worksheet.addRows(mappedData);
+
+      // 3. Estilos: Color oficial de la tabla
+      const headerRow = worksheet.getRow(1);
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF002061' } // Color de fondo #002061 (ARGB)
+        };
+        cell.font = {
+          color: { argb: 'FFFFFFFF' }, // Blanco
+          bold: true
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      // 4. Escribir en disco
+      await workbook.xlsx.writeFile(filePath);
+
       return { success: true, filePath };
     } catch (error) {
+      if (error.code === 'EBUSY') {
+        return { success: false, error: 'BUSY' };
+      }
       console.error('Error al exportar los datos:', error);
       throw error;
     }
