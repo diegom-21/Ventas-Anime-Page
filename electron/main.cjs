@@ -93,17 +93,24 @@ app.whenReady().then(() => {
       }
 
       // 1. Mapear los datos para Excel para que se vean increíbles y entendibles
-      const mappedData = dataToExport.map(sale => ({
-        'Fecha': sale.fecha || '-',
-        'Figura': sale.figura || '-',
-        'Cliente Real': sale.cliente_real ? sale.cliente_real.toUpperCase() : '-',
-        'Cliente Apodo': sale.cliente_apodo ? sale.cliente_apodo.toUpperCase() : '-',
-        'Valor Total': Number(sale.valor_venta) || 0,
-        'Pagado / Abono': Number(sale.pagado) || 0,
-        'Por Pagar': Number(sale.por_pagar) || 0,
-        'Estado': sale.estado ? sale.estado.toUpperCase() : '-',
-        'Comentario': sale.comentario || ''
-      }));
+      const mappedData = dataToExport.map(sale => {
+        const venta = Number(sale.valor_venta) || 0;
+        const costo = Number(sale.valor_1) || 0;
+        return {
+          'FECHA': sale.fecha || '-',
+          'FIGURA': sale.figura ? sale.figura.toUpperCase() : '-',
+          'CLIENTE': sale.cliente_apodo ? sale.cliente_apodo.toUpperCase() : '-',
+          'VALOR 1': costo,
+          'VENTA': venta,
+          'MARGEN': venta - costo,
+          'PAGADO': Number(sale.pagado) || 0,
+          'POR PAGAR': Number(sale.por_pagar) || 0,
+          'ESTADO': sale.estado ? sale.estado.toUpperCase() : '-',
+          'COMENTARIO': sale.comentario ? sale.comentario.toUpperCase() : '',
+          'OBS': sale.obs ? sale.obs.toUpperCase() : '',
+          'LOTE': sale.lote ? sale.lote.toUpperCase() : ''
+        };
+      });
 
       // 2. Transformar a Hoja de Excel con ExcelJS para añadir estilos
       const ExcelJS = require('exceljs');
@@ -112,15 +119,18 @@ app.whenReady().then(() => {
 
       // Definir columnas y sus anchos exactos
       worksheet.columns = [
-        { header: 'Fecha', key: 'Fecha', width: 17 },
-        { header: 'Figura', key: 'Figura', width: 42 },
-        { header: 'Cliente Real', key: 'Cliente Real', width: 27 },
-        { header: 'Cliente Apodo', key: 'Cliente Apodo', width: 22 },
-        { header: 'Valor Total', key: 'Valor Total', width: 22 },
-        { header: 'Pagado / Abono', key: 'Pagado / Abono', width: 17 },
-        { header: 'Por Pagar', key: 'Por Pagar', width: 15 },
-        { header: 'Estado', key: 'Estado', width: 22 },
-        { header: 'Comentario', key: 'Comentario', width: 27 }
+        { header: 'FECHA', key: 'FECHA', width: 10.71 },
+        { header: 'FIGURA', key: 'FIGURA', width: 42.14 },
+        { header: 'CLIENTE', key: 'CLIENTE', width: 34.86 },
+        { header: 'VALOR 1', key: 'VALOR 1', width: 10.61 },
+        { header: 'VENTA', key: 'VENTA', width: 10.61 },
+        { header: 'MARGEN', key: 'MARGEN', width: 10.61 },
+        { header: 'PAGADO', key: 'PAGADO', width: 10.61 },
+        { header: 'POR PAGAR', key: 'POR PAGAR', width: 15.43 },
+        { header: 'ESTADO', key: 'ESTADO', width: 17.14 },
+        { header: 'COMENTARIO', key: 'COMENTARIO', width: 26.00 },
+        { header: 'OBS', key: 'OBS', width: 10.61 },
+        { header: 'LOTE', key: 'LOTE', width: 15.0 }
       ];
 
       // Añadir la información
@@ -128,17 +138,44 @@ app.whenReady().then(() => {
 
       // 3. Estilos: Color oficial de la tabla
       const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
+      headerRow.height = 15.0; // Alto de fila 15.0
+      
+      headerRow.eachCell((cell, colNumber) => {
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FF002061' } // Color de fondo #002061 (ARGB)
         };
         cell.font = {
+          name: 'Aptos Narrow',
+          size: 11,
           color: { argb: 'FFFFFFFF' }, // Blanco
           bold: true
         };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        // Alineación encabezados
+        const colKey = worksheet.getColumn(colNumber).key;
+        if (colKey === 'ESTADO') {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else {
+          cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        }
+      });
+
+      // Estilos para las filas de datos
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Saltar encabezado
+        row.eachCell((cell, colNumber) => {
+          cell.font = { color: { argb: 'FF000000' }, bold: false };
+          const colKey = worksheet.getColumn(colNumber).key;
+          if (colKey === 'ESTADO') {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else {
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          }
+          if(colKey === 'VALOR 1' || colKey === 'VENTA' || colKey === 'MARGEN' || colKey === 'PAGADO' || colKey === 'POR PAGAR'){
+            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          }
+        });
       });
 
       // 4. Escribir en disco
@@ -150,6 +187,104 @@ app.whenReady().then(() => {
         return { success: false, error: 'BUSY' };
       }
       console.error('Error al exportar los datos:', error);
+      throw error;
+    }
+  });
+
+  // Importar excel masivo
+  ipcMain.handle('import-legacy-excel', async (event) => {
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        title: 'Seleccionar Archivo Excel Antiguo',
+        buttonLabel: 'Importar',
+        filters: [{ name: 'Archivos Excel', extensions: ['xlsx'] }],
+        properties: ['openFile']
+      });
+
+      if (canceled || filePaths.length === 0) return { success: false, canceled: true };
+
+      const filePath = filePaths[0];
+      const ExcelJS = require('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) throw new Error("El excel no tiene hojas");
+
+      let currentData = [];
+      try {
+        const raw = await fs.readFile(dataFilePath, 'utf-8');
+        currentData = JSON.parse(raw);
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+      }
+
+      const crypto = require('crypto');
+      const newSales = [];
+
+      // Asumimos fila 1 es encabezado, leemos desde la 2
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // saltar header
+        
+        const values = row.values;
+        // Según análisis previo: 
+        // 2:FECHA, 4:FIGURA, 5:CLIENTE, 6:VALOR 1, 7:VENTA, 8:MARGEN, 9:PAGADO, 10:POR PAGAR, 11:ESTADO, 12:COMENTARIO, 13:OBS, 14:LOTE
+        
+        // Extraer y limpiar datos usando getCell(i) real (1-indexed)
+        const getVal = (colIdx) => {
+          let cell = row.getCell(colIdx);
+          let v = cell.value;
+          if (v && typeof v === 'object' && v.result !== undefined) v = v.result;
+          if (v instanceof Date) return v.toISOString().split('T')[0];
+          return v !== undefined && v !== null ? v : '';
+        };
+
+        const fechaRaw = getVal(1);
+        const figura = getVal(3).toString().trim();
+        const cliente_apodo = getVal(4).toString().trim();
+        const valor_1 = Number(getVal(5)) || 0;
+        const valor_venta = Number(getVal(6)) || 0;
+        const pagado = Number(getVal(8)) || 0;
+        const comentario = getVal(11).toString().trim();
+        const obs = getVal(12).toString().trim();
+        const lote = getVal(13).toString().trim();
+
+        // Si la fila está vacía, saltar
+        if (!figura && !cliente_apodo) return;
+
+        // Auto calcular
+        const por_pagar = valor_venta - pagado;
+        let estado = 'debe';
+        if (por_pagar <= 0) estado = 'pagado';
+        else if (pagado > 0) estado = 'parcial';
+
+        newSales.push({
+          id: crypto.randomUUID(),
+          fecha: fechaRaw || new Date().toISOString().split('T')[0],
+          figura,
+          cliente_apodo,
+          cliente_real: '', // En el legacy no lo usaban separado
+          valor_1,
+          valor_venta,
+          pagado,
+          por_pagar,
+          estado,
+          comentario,
+          obs,
+          lote
+        });
+      });
+
+      const finalData = [...currentData, ...newSales];
+      
+      // Guardar
+      await fs.mkdir(path.dirname(dataFilePath), { recursive: true });
+      await fs.writeFile(dataFilePath, JSON.stringify(finalData, null, 2), 'utf-8');
+
+      return { success: true, count: newSales.length };
+
+    } catch (error) {
+      console.error('Error al importar:', error);
       throw error;
     }
   });

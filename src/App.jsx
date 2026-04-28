@@ -4,7 +4,7 @@ import { DashboardHeader } from './components/dashboard/DashboardHeader';
 import { SalesTable } from './components/sales/SalesTable';
 import { SalesForm } from './components/sales/SalesForm';
 import { ClientSummary } from './components/clients/ClientSummary';
-import { Plus, Package, Sheet } from 'lucide-react';
+import { Plus, Package, Sheet, FileUp } from 'lucide-react';
 
 function Dashboard() {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -46,18 +46,44 @@ function Dashboard() {
     }
   };
 
+  const handleImportLegacy = async () => {
+    if (window.electronAPI && window.electronAPI.importLegacyExcel) {
+      try {
+        const result = await window.electronAPI.importLegacyExcel();
+        if (result && result.success) {
+          alert(`¡Migración Exitosa!\nSe han importado ${result.count} ventas desde el Excel antiguo.\n\nLa aplicación se recargará para mostrar los datos nuevos.`);
+          window.location.reload();
+        }
+      } catch (error) {
+        console.error('Error importando Excel', error);
+        alert('Hubo un error al leer el archivo Excel.');
+      }
+    } else {
+      alert('Esta función solo está disponible en la versión de escritorio.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Navbar/Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
               <img src="/logo.jpg" alt="Logo" className="h-10 object-contain rounded" onError={(e) => { e.target.style.display='none'; }} />
               <h1 className="text-xl font-bold text-slate-800 tracking-tight ml-2">NSJ Store Dashboard</h1>
             </div>
             
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
+              <button 
+                onClick={handleImportLegacy}
+                className="btn border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-700 shadow-sm gap-2"
+                title="Migrar datos desde un archivo Excel antiguo"
+              >
+                <FileUp size={18} />
+                <span className="hidden md:inline">Importar Excel Antiguo</span>
+              </button>
+
               <button 
                 onClick={handleExport}
                 className="btn border border-slate-200 bg-white hover:bg-emerald-50 text-slate-700 shadow-sm gap-2"
@@ -80,7 +106,7 @@ function Dashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-8">
         <DashboardHeader />
         
         <div className="flex-1" style={{ minHeight: '500px' }}>

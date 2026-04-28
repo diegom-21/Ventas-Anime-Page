@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSales } from '../../context/SalesContext';
 import { calculateSaleStatus, formatCurrency } from '../../utils/calculations';
 import { X, Save } from 'lucide-react';
@@ -20,19 +20,31 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
     return Array.from(clientsMap.values());
   }, [sales]);
 
+  const uniqueLotes = React.useMemo(() => {
+    const lotesSet = new Set();
+    sales.forEach(s => {
+      if (s.lote) lotesSet.add(s.lote.toUpperCase());
+    });
+    return Array.from(lotesSet);
+  }, [sales]);
+
   const initialState = {
     fecha: new Date().toISOString().split('T')[0],
     figura: '',
     cliente_apodo: '',
     cliente_real: '',
     valor_venta: '',
-    margen: '',
+    valor_1: '',
+    lote: '',
     pagado: '0',
-    comentario: ''
+    comentario: '',
+    obs: ''
   };
 
   const [formData, setFormData] = useState(initialState);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showLoteSuggestions, setShowLoteSuggestions] = useState(false);
+  const comentarioRef = useRef(null);
 
   useEffect(() => {
     if (saleToEdit) {
@@ -117,12 +129,12 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
               </div>
 
               <div className="relative">
-                <label className="label">Apodo del Cliente</label>
+                <label className="label">Cliente</label>
                 <input 
                   type="text" 
                   name="cliente_apodo" 
                   required 
-                  placeholder="Ingrese apodo" 
+                  placeholder="Ingrese Cliente" 
                   value={formData.cliente_apodo} 
                   onChange={handleChange} 
                   onFocus={() => setShowSuggestions(true)}
@@ -163,8 +175,42 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
               </div>
 
               <div>
-                <label className="label">Margen (Opcional)</label>
-                <input type="number" name="margen" placeholder="Ej: 5000" value={formData.margen} onChange={handleChange} className="input" />
+                <label className="label">Valor 1</label>
+                <input type="number" step="0.01" name="valor_1" placeholder="Ej: 40.50" value={formData.valor_1} onChange={handleChange} className="input" />
+              </div>
+
+              <div className="relative">
+                <label className="label">Lote</label>
+                <input 
+                  type="text" 
+                  name="lote" 
+                  placeholder="Ej: Lote Dic" 
+                  value={formData.lote} 
+                  onChange={handleChange} 
+                  onFocus={() => setShowLoteSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowLoteSuggestions(false), 200)}
+                  className="input" 
+                  autoComplete="off"
+                />
+                
+                {showLoteSuggestions && formData.lote && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {uniqueLotes
+                      .filter(l => l.includes(formData.lote.toUpperCase()))
+                      .map(l => (
+                        <div 
+                          key={l} 
+                          className="px-4 py-2 hover:bg-brand-50 cursor-pointer text-sm text-slate-700"
+                          onClick={() => {
+                            handleChange({ target: { name: 'lote', value: l } });
+                            setShowLoteSuggestions(false);
+                          }}
+                        >
+                          <span className="font-semibold uppercase">{l}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
               
               <div className="col-span-1 md:col-span-2 border-t border-slate-100 pt-4 mt-2">
@@ -172,12 +218,12 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="label">Valor Venta (Total)</label>
-                    <input type="number" name="valor_venta" required placeholder="Ej: 50000" min="0" value={formData.valor_venta} onChange={handleChange} className="input text-lg font-bold" />
+                    <input type="number" step="0.01" name="valor_venta" required placeholder="Ej: 50.00" min="0" value={formData.valor_venta} onChange={handleChange} className="input text-lg font-bold" />
                   </div>
 
                   <div>
                     <label className="label">Monto Pagado</label>
-                    <input type="number" name="pagado" required placeholder="Ej: 10000" min="0" value={formData.pagado} onChange={handleChange} className="input text-lg text-emerald-600 font-bold" />
+                    <input type="number" step="0.01" name="pagado" required placeholder="Ej: 10.00" min="0" value={formData.pagado} onChange={handleChange} className="input text-lg text-emerald-600 font-bold" />
                   </div>
                 </div>
               </div>
@@ -196,9 +242,44 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
                 </div>
               </div>
 
-              <div className="col-span-1 md:col-span-2">
-                <label className="label">Comentario</label>
-                <textarea name="comentario" rows="2" placeholder="Ej: Falta caja, entrega en metro..." value={formData.comentario} onChange={handleChange} className="input resize-none" />
+              <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                <div>
+                  <label className="label">Comentario (Visible)</label>
+                  <div className="relative border border-slate-200 rounded-lg focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 transition-all bg-white flex flex-col">
+                    <textarea 
+                      name="comentario" 
+                      ref={comentarioRef}
+                      rows="2" 
+                      placeholder="Ej: Pago pendiente..." 
+                      value={formData.comentario} 
+                      onChange={handleChange} 
+                      className="w-full bg-transparent p-3 outline-none resize-none text-sm" 
+                    />
+                    {!formData.comentario && (
+                      <div className="flex gap-2 px-3 pb-3 flex-wrap">
+                        {['PREVENTA', 'ENVIADO', 'LLEGÓ PERÚ'].map(sug => (
+                          <button
+                            key={sug}
+                            type="button"
+                            onClick={() => {
+                              handleChange({ target: { name: 'comentario', value: sug + ' ' } });
+                              setTimeout(() => {
+                                if (comentarioRef.current) comentarioRef.current.focus();
+                              }, 10);
+                            }}
+                            className="text-xs px-2 py-1 bg-brand-50 text-brand-600 rounded hover:bg-brand-100 transition-colors border border-brand-200"
+                          >
+                            {sug}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="label">OBS (Interno)</label>
+                  <textarea name="obs" rows="2" placeholder="Ej: Caja dañada..." value={formData.obs} onChange={handleChange} className="input resize-none" />
+                </div>
               </div>
 
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useSales } from '../../context/SalesContext';
 import { formatCurrency } from '../../utils/calculations';
 import { Edit2, Trash2, Receipt as ReceiptIcon, Search, Filter } from 'lucide-react';
@@ -17,12 +17,22 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
   const [statusFilter, setStatusFilter] = useState('todos');
   const [dateFilter, setDateFilter] = useState('');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 50;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, dateFilter]);
+
   const filteredSales = useMemo(() => {
     return sales.filter(sale => {
       const matchesSearch = 
         (sale.cliente_apodo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (sale.cliente_real || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (sale.figura || '').toLowerCase().includes(searchTerm.toLowerCase());
+        (sale.figura || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (sale.comentario || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (sale.obs || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (sale.lote || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'todos' || sale.estado === statusFilter;
       const matchesDate = !dateFilter || sale.fecha === dateFilter;
@@ -30,6 +40,13 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
       return matchesSearch && matchesStatus && matchesDate;
     });
   }, [sales, searchTerm, statusFilter, dateFilter]);
+
+  const totalPages = Math.ceil(filteredSales.length / rowsPerPage);
+  
+  const currentSales = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return filteredSales.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredSales, currentPage]);
 
   const handleGenerateReceipt = async (sale) => {
     setSelectedSaleForReceipt(sale);
@@ -108,24 +125,28 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
             <tr>
               <th className="px-6 py-4 font-medium">Fecha</th>
               <th className="px-6 py-4 font-medium">Producto</th>
-              <th className="px-6 py-4 font-medium">Cliente (Apodo)</th>
-              <th className="px-6 py-4 font-medium">Cliente Real</th>
+              <th className="px-6 py-4 font-medium">Cliente</th>
+              <th className="px-6 py-4 font-medium">Valor 1</th>
               <th className="px-6 py-4 font-medium">Venta</th>
+              <th className="px-6 py-4 font-medium">Margen</th>
               <th className="px-6 py-4 font-medium">Pagado</th>
               <th className="px-6 py-4 font-medium">Por Pagar</th>
               <th className="px-6 py-4 font-medium">Estado</th>
+              <th className="px-6 py-4 font-medium">Comentario</th>
+              <th className="px-6 py-4 font-medium">OBS</th>
+              <th className="px-6 py-4 font-medium">Lote</th>
               <th className="px-6 py-4 font-medium text-center">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {filteredSales.length === 0 ? (
+            {currentSales.length === 0 ? (
               <tr>
-                <td colSpan="9" className="px-6 py-12 text-center text-slate-500">
+                <td colSpan="13" className="px-6 py-12 text-center text-slate-500">
                   No se encontraron ventas con los filtros actuales.
                 </td>
               </tr>
             ) : (
-              filteredSales.map((sale) => (
+              currentSales.map((sale) => (
                 <tr key={sale.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-slate-600">{sale.fecha}</td>
                   <td className="px-6 py-4 font-medium text-slate-800">{sale.figura}</td>
@@ -134,8 +155,9 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
                       {sale.cliente_apodo}
                     </button>
                   </td>
-                  <td className="px-6 py-4 text-slate-600">{sale.cliente_real}</td>
+                  <td className="px-6 py-4 text-slate-600">{formatCurrency(sale.valor_1)}</td>
                   <td className="px-6 py-4 font-medium">{formatCurrency(sale.valor_venta)}</td>
+                  <td className="px-6 py-4 font-medium text-blue-600">{formatCurrency(Number(sale.valor_venta) - Number(sale.valor_1))}</td>
                   <td className="px-6 py-4 text-emerald-600 font-medium">{formatCurrency(sale.pagado)}</td>
                   <td className="px-6 py-4 text-red-600 font-medium">{formatCurrency(sale.por_pagar)}</td>
                   <td className="px-6 py-4">
@@ -143,6 +165,9 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
                       {sale.estado}
                     </span>
                   </td>
+                  <td className="px-6 py-4 text-slate-500 text-xs truncate max-w-[150px]" title={sale.comentario}>{sale.comentario || '-'}</td>
+                  <td className="px-6 py-4 text-slate-500 text-xs truncate max-w-[150px]" title={sale.obs}>{sale.obs || '-'}</td>
+                  <td className="px-6 py-4 text-slate-500 text-xs font-semibold">{sale.lote || '-'}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <button onClick={() => handleGenerateReceipt(sale)} title="Generar Recibo" className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded transition-colors">
@@ -161,6 +186,37 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-sm text-slate-500 gap-4">
+        <div>
+          Mostrando <span className="font-medium text-slate-700">{filteredSales.length > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0}</span> a <span className="font-medium text-slate-700">{Math.min(currentPage * rowsPerPage, filteredSales.length)}</span> de <span className="font-medium text-slate-700">{filteredSales.length}</span> registros
+        </div>
+        
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-slate-700 font-medium"
+            >
+              Anterior
+            </button>
+            
+            <div className="flex items-center justify-center min-w-[100px] font-medium text-slate-700">
+              Página {currentPage} de {totalPages}
+            </div>
+            
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-slate-700 font-medium"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Hidden Receipt Renderer */}
