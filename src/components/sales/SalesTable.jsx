@@ -6,7 +6,7 @@ import { downloadReceiptAsImage } from '../../utils/receiptGenerator';
 import { Receipt } from '../receipt/Receipt';
 import { ConfirmModal } from '../ConfirmModal';
 
-export const SalesTable = ({ onEditSale, onClientClick }) => {
+export const SalesTable = ({ onEditSale, onClientClick, onShowAlert }) => {
   const { sales, deleteSale } = useSales();
   const receiptRef = useRef(null);
   const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState(null);
@@ -27,17 +27,34 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
 
   const filteredSales = useMemo(() => {
     return sales.filter(sale => {
+      const searchLower = searchTerm.toLowerCase();
+      
+      const fechaRaw = sale.fecha || '';
+      let fechaAmigable = '';
+      if (fechaRaw.includes('-')) {
+        const parts = fechaRaw.split('-');
+        if (parts.length === 3) {
+          fechaAmigable = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+
       const matchesSearch = 
-        (sale.cliente_apodo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (sale.figura || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (sale.comentario || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (sale.obs || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (sale.lote || '').toLowerCase().includes(searchTerm.toLowerCase());
+        (sale.cliente || '').toLowerCase().includes(searchLower) ||
+        (sale.figura || '').toLowerCase().includes(searchLower) ||
+        (sale.comentario || '').toLowerCase().includes(searchLower) ||
+        (sale.obs || '').toLowerCase().includes(searchLower) ||
+        (sale.lote || '').toLowerCase().includes(searchLower) ||
+        fechaRaw.includes(searchLower) ||
+        fechaAmigable.includes(searchLower);
       
       const matchesStatus = statusFilter === 'todos' || sale.estado === statusFilter;
       const matchesDate = !dateFilter || sale.fecha === dateFilter;
 
       return matchesSearch && matchesStatus && matchesDate;
+    }).sort((a, b) => {
+      const dateA = a.fecha ? new Date(a.fecha).getTime() : 0;
+      const dateB = b.fecha ? new Date(b.fecha).getTime() : 0;
+      return dateB - dateA;
     });
   }, [sales, searchTerm, statusFilter, dateFilter]);
 
@@ -54,10 +71,22 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
     setTimeout(async () => {
       try {
         if (receiptRef.current) {
-          await downloadReceiptAsImage(receiptRef.current, sale.cliente_apodo);
+          const result = await downloadReceiptAsImage(receiptRef.current, sale.cliente);
+          if (onShowAlert && result) {
+            if (result.success && result.filePath) {
+              onShowAlert('success', '¡Recibo Generado!', `El recibo de compra para ${sale.cliente} ha sido descargado correctamente.\n\nRuta:\n${result.filePath}`);
+            } else if (result.success) {
+              // Fallback web
+              onShowAlert('success', '¡Recibo Generado!', `El recibo de compra para ${sale.cliente} ha sido descargado correctamente.`);
+            }
+            // Si fue cancelado, no mostramos alerta
+          }
         }
       } catch (err) {
         console.error('Error generating receipt:', err);
+        if (onShowAlert) {
+          onShowAlert('error', 'Error al Generar', 'Hubo un problema al crear la imagen del recibo. Inténtalo de nuevo.');
+        }
       } finally {
         setSelectedSaleForReceipt(null);
       }
@@ -148,11 +177,15 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
             ) : (
               currentSales.map((sale) => (
                 <tr key={sale.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-slate-600">{sale.fecha}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-slate-600">
+                    {sale.fecha && sale.fecha.includes('-') 
+                      ? `${sale.fecha.split('-')[2]}/${sale.fecha.split('-')[1]}/${sale.fecha.split('-')[0]}`
+                      : sale.fecha}
+                  </td>
                   <td className="px-6 py-4 font-medium text-slate-800">{sale.figura}</td>
                   <td className="px-6 py-4">
-                    <button onClick={() => onClientClick(sale.cliente_apodo)} className="font-semibold text-brand-600 hover:text-brand-800 hover:underline transition-colors uppercase cursor-pointer">
-                      {sale.cliente_apodo}
+                    <button onClick={() => onClientClick(sale.cliente)} className="font-semibold text-brand-600 hover:text-brand-800 hover:underline transition-colors uppercase cursor-pointer">
+                      {sale.cliente}
                     </button>
                   </td>
                   <td className="px-6 py-4 text-slate-600">{formatCurrency(sale.valor_1)}</td>
@@ -230,7 +263,7 @@ export const SalesTable = ({ onEditSale, onClientClick }) => {
           setSaleToDelete(null);
         }}
         title="Eliminar venta"
-        message={`¿Estás seguro que deseas eliminar el producto ${saleToDelete?.figura} de ${saleToDelete?.cliente_apodo}?`}
+        message={`¿Estás seguro que deseas eliminar el producto ${saleToDelete?.figura} de ${saleToDelete?.cliente}?`}
       />
     </div>
   );

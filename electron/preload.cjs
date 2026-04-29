@@ -4,5 +4,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readData: () => ipcRenderer.invoke('read-data'),
   writeData: (data) => ipcRenderer.invoke('write-data', data),
   exportData: () => ipcRenderer.invoke('export-data'),
-  importLegacyExcel: () => ipcRenderer.invoke('import-legacy-excel')
+  importLegacyExcel: () => ipcRenderer.invoke('import-legacy-excel'),
+  saveReceipt: (dataUrl, filename) => ipcRenderer.invoke('save-receipt', dataUrl, filename)
 });

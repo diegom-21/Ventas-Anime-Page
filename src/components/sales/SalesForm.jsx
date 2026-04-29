@@ -10,10 +10,10 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
   const uniqueClients = React.useMemo(() => {
     const clientsMap = new Map();
     sales.forEach(s => {
-      if (s.cliente_apodo && !clientsMap.has(s.cliente_apodo.toUpperCase())) {
-        clientsMap.set(s.cliente_apodo.toUpperCase(), { 
-          apodo: s.cliente_apodo, 
-          real: s.cliente_real 
+      if (s.cliente && !clientsMap.has(s.cliente.toUpperCase())) {
+        clientsMap.set(s.cliente.toUpperCase(), { 
+          cliente: s.cliente.toUpperCase(), 
+          apodo: s.cliente_apodo || '' 
         });
       }
     });
@@ -31,8 +31,8 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
   const initialState = {
     fecha: new Date().toISOString().split('T')[0],
     figura: '',
+    cliente: '',
     cliente_apodo: '',
-    cliente_real: '',
     valor_venta: '',
     valor_1: '',
     lote: '',
@@ -57,16 +57,20 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
   if (!isOpen) return null;
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+    
+    // Forzar mayúsculas en campos de texto (excepto números y fechas)
+    if (typeof value === 'string' && name !== 'fecha' && name !== 'valor_1' && name !== 'valor_venta' && name !== 'pagado') {
+      value = value.toUpperCase();
+    }
     
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
       
-      if (name === 'cliente_apodo') {
-        const upperValue = value.toUpperCase();
-        const existingClient = uniqueClients.find(c => c.apodo.toUpperCase() === upperValue);
-        if (existingClient) {
-          newData.cliente_real = existingClient.real;
+      if (name === 'cliente') {
+        const existingClient = uniqueClients.find(c => c.cliente === value);
+        if (existingClient && existingClient.apodo) {
+          newData.cliente_apodo = existingClient.apodo;
         }
       }
       
@@ -132,10 +136,10 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
                 <label className="label">Cliente</label>
                 <input 
                   type="text" 
-                  name="cliente_apodo" 
+                  name="cliente" 
                   required 
                   placeholder="Ingrese Cliente" 
-                  value={formData.cliente_apodo} 
+                  value={formData.cliente} 
                   onChange={handleChange} 
                   onFocus={() => setShowSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
@@ -143,21 +147,21 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
                   autoComplete="new-password"
                 />
                 
-                {showSuggestions && formData.cliente_apodo && (
+                {showSuggestions && formData.cliente && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                     {uniqueClients
-                      .filter(c => c.apodo.toUpperCase().includes(formData.cliente_apodo.toUpperCase()))
+                      .filter(c => c.cliente.includes(formData.cliente))
                       .map(c => (
                         <div 
-                          key={c.apodo} 
+                          key={c.cliente} 
                           className="px-4 py-2 hover:bg-brand-50 cursor-pointer text-sm text-slate-700"
                           onClick={() => {
-                            handleChange({ target: { name: 'cliente_apodo', value: c.apodo } });
+                            handleChange({ target: { name: 'cliente', value: c.cliente } });
                             setShowSuggestions(false);
                           }}
                         >
-                          <span className="font-semibold uppercase">{c.apodo}</span>
-                          <span className="text-slate-400 text-xs ml-2">({c.real})</span>
+                          <span className="font-semibold">{c.cliente}</span>
+                          {c.apodo && <span className="text-slate-400 text-xs ml-2">({c.apodo})</span>}
                         </div>
                       ))}
                   </div>
@@ -165,8 +169,8 @@ export const SalesForm = ({ isOpen, onClose, saleToEdit }) => {
               </div>
 
               <div>
-                <label className="label">Nombre Real</label>
-                <input type="text" name="cliente_real" required placeholder="Ej: Juan Pérez" value={formData.cliente_real} onChange={handleChange} className="input" />
+                <label className="label">Apodo (Opcional)</label>
+                <input type="text" name="cliente_apodo" placeholder="Ej: Juan" value={formData.cliente_apodo} onChange={handleChange} className="input" />
               </div>
 
               <div>

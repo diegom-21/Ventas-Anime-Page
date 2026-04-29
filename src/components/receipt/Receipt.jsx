@@ -32,8 +32,8 @@ export const Receipt = forwardRef(({ sale }, ref) => {
           <div className="flex justify-between items-center">
             <span className="text-slate-500 text-sm">Cliente</span>
             <span className="font-medium text-slate-800 text-right">
-              {sale.cliente_real} <br/>
-              <span className="text-xs text-slate-500">({sale.cliente_apodo})</span>
+              {sale.cliente} <br/>
+              {sale.cliente_apodo && <span className="text-xs text-slate-500">({sale.cliente_apodo})</span>}
             </span>
           </div>
           <div className="flex justify-between items-center">

@@ -44,8 +44,8 @@ export const calculateDashboardTotals = (sales = []) => {
  * @param {Array} sales 
  * @param {string} clienteApodo 
  */
-export const calculateClientSummary = (sales = [], clienteApodo) => {
-  const clientSales = sales.filter(s => s.cliente_apodo === clienteApodo);
+export const calculateClientSummary = (sales = [], clienteNombre) => {
+  const clientSales = sales.filter(s => s.cliente === clienteNombre);
   
   const totals = clientSales.reduce((acc, sale) => {
     acc.totalCompras += Number(sale.valor_venta || 0);

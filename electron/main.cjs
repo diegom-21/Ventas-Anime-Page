@@ -87,6 +87,12 @@ app.whenReady().then(() => {
       try {
         const raw = await fs.readFile(dataFilePath, 'utf-8');
         dataToExport = JSON.parse(raw);
+        // Ordenar de más antiguo a más reciente para el Excel, manejando fechas vacías
+        dataToExport.sort((a, b) => {
+          const dateA = a.fecha ? new Date(a.fecha).getTime() : 0;
+          const dateB = b.fecha ? new Date(b.fecha).getTime() : 0;
+          return dateA - dateB;
+        });
       } catch (err) {
         // En caso de que el archivo base no exista todavía, exportamos vacío
         if (err.code !== 'ENOENT') throw err;
@@ -96,15 +102,30 @@ app.whenReady().then(() => {
       const mappedData = dataToExport.map(sale => {
         const venta = Number(sale.valor_venta) || 0;
         const costo = Number(sale.valor_1) || 0;
+        const pagado = Number(sale.pagado) || 0;
+        
+        // Cálculos estrictos matemáticos según solicitud
+        const margenReal = venta - costo;
+        const porPagarReal = venta - pagado;
+        
+        // Formatear la fecha a DD/MM/YYYY para que sea amigable en Excel
+        let fechaAmigable = sale.fecha || '-';
+        if (sale.fecha && sale.fecha.includes('-')) {
+          const parts = sale.fecha.split('-');
+          if (parts.length === 3) {
+            fechaAmigable = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          }
+        }
+
         return {
-          'FECHA': sale.fecha || '-',
+          'FECHA': fechaAmigable,
           'FIGURA': sale.figura ? sale.figura.toUpperCase() : '-',
-          'CLIENTE': sale.cliente_apodo ? sale.cliente_apodo.toUpperCase() : '-',
+          'CLIENTE': sale.cliente ? sale.cliente.toUpperCase() : '-',
           'VALOR 1': costo,
           'VENTA': venta,
-          'MARGEN': venta - costo,
-          'PAGADO': Number(sale.pagado) || 0,
-          'POR PAGAR': Number(sale.por_pagar) || 0,
+          'MARGEN': margenReal,
+          'PAGADO': pagado,
+          'POR PAGAR': porPagarReal,
           'ESTADO': sale.estado ? sale.estado.toUpperCase() : '-',
           'COMENTARIO': sale.comentario ? sale.comentario.toUpperCase() : '',
           'OBS': sale.obs ? sale.obs.toUpperCase() : '',
@@ -133,8 +154,28 @@ app.whenReady().then(() => {
         { header: 'LOTE', key: 'LOTE', width: 15.0 }
       ];
 
-      // Añadir la información
-      worksheet.addRows(mappedData);
+      // Añadir la información como Tabla Oficial de Excel
+      worksheet.addTable({
+        name: 'VentasOficial',
+        ref: 'A1',
+        headerRow: true,
+        style: {
+          theme: null, // Mantiene nuestro color azul de encabezado
+          showRowStripes: false,
+        },
+        columns: [
+          { name: 'FECHA', filterButton: true }, { name: 'FIGURA', filterButton: true }, { name: 'CLIENTE', filterButton: true },
+          { name: 'VALOR 1', filterButton: true }, { name: 'VENTA', filterButton: true }, { name: 'MARGEN', filterButton: true },
+          { name: 'PAGADO', filterButton: true }, { name: 'POR PAGAR', filterButton: true }, { name: 'ESTADO', filterButton: true },
+          { name: 'COMENTARIO', filterButton: true }, { name: 'OBS', filterButton: true }, { name: 'LOTE', filterButton: true }
+        ],
+        rows: mappedData.map(sale => [
+          sale['FECHA'], sale['FIGURA'], sale['CLIENTE'],
+          sale['VALOR 1'], sale['VENTA'], sale['MARGEN'],
+          sale['PAGADO'], sale['POR PAGAR'], sale['ESTADO'],
+          sale['COMENTARIO'], sale['OBS'], sale['LOTE']
+        ])
+      });
 
       // 3. Estilos: Color oficial de la tabla
       const headerRow = worksheet.getRow(1);
@@ -165,15 +206,18 @@ app.whenReady().then(() => {
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return; // Saltar encabezado
         row.eachCell((cell, colNumber) => {
-          cell.font = { color: { argb: 'FF000000' }, bold: false };
+          cell.font = { name: 'Aptos Narrow', size: 11, color: { argb: 'FF000000' }, bold: false };
+          
           const colKey = worksheet.getColumn(colNumber).key;
           if (colKey === 'ESTADO') {
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
           } else {
             cell.alignment = { vertical: 'middle', horizontal: 'left' };
           }
-          if(colKey === 'VALOR 1' || colKey === 'VENTA' || colKey === 'MARGEN' || colKey === 'PAGADO' || colKey === 'POR PAGAR'){
-            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          
+          // Formato de número con decimales
+          if (['VALOR 1', 'VENTA', 'MARGEN', 'PAGADO', 'POR PAGAR'].includes(colKey)) {
+            cell.numFmt = '#,##0.00';
           }
         });
       });
@@ -222,35 +266,62 @@ app.whenReady().then(() => {
       const crypto = require('crypto');
       const newSales = [];
 
+      // 1. Leer encabezados para saber exactamente en qué columna está cada dato
+      const headerMap = {};
+      const headerRow = worksheet.getRow(1);
+      headerRow.eachCell((cell, colNumber) => {
+        if (cell.value) {
+          const colName = cell.value.toString().trim().toUpperCase();
+          headerMap[colName] = colNumber;
+        }
+      });
+
+      // Parseador robusto de fechas
+      const parseDate = (val) => {
+        if (!val) return '';
+        if (val instanceof Date) {
+          // Usar toISOString evita el desfase de 1 día que sufren los Dates locales en GMT-5
+          return val.toISOString().split('T')[0];
+        }
+        if (typeof val === 'string') {
+          const s = val.trim();
+          const parts = s.split('/');
+          if (parts.length === 3) {
+            let [d, m, y] = parts;
+            if (y.length === 2) y = '20' + y;
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          }
+          return s;
+        }
+        return String(val);
+      };
+
       // Asumimos fila 1 es encabezado, leemos desde la 2
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return; // saltar header
-        
-        const values = row.values;
-        // Según análisis previo: 
-        // 2:FECHA, 4:FIGURA, 5:CLIENTE, 6:VALOR 1, 7:VENTA, 8:MARGEN, 9:PAGADO, 10:POR PAGAR, 11:ESTADO, 12:COMENTARIO, 13:OBS, 14:LOTE
-        
-        // Extraer y limpiar datos usando getCell(i) real (1-indexed)
-        const getVal = (colIdx) => {
+
+        // Extraer y limpiar datos dinámicamente
+        const getValByName = (name, fallbackIdx) => {
+          const colIdx = headerMap[name] || fallbackIdx;
+          if (!colIdx) return '';
           let cell = row.getCell(colIdx);
           let v = cell.value;
           if (v && typeof v === 'object' && v.result !== undefined) v = v.result;
-          if (v instanceof Date) return v.toISOString().split('T')[0];
-          return v !== undefined && v !== null ? v : '';
+          return v;
         };
 
-        const fechaRaw = getVal(1);
-        const figura = getVal(3).toString().trim();
-        const cliente_apodo = getVal(4).toString().trim();
-        const valor_1 = Number(getVal(5)) || 0;
-        const valor_venta = Number(getVal(6)) || 0;
-        const pagado = Number(getVal(8)) || 0;
-        const comentario = getVal(11).toString().trim();
-        const obs = getVal(12).toString().trim();
-        const lote = getVal(13).toString().trim();
+        const fechaRaw = parseDate(getValByName('FECHA', 1));
+        const figura = (getValByName('FIGURA', 2) || '').toString().trim().toUpperCase();
+        const cliente = (getValByName('CLIENTE', 3) || '').toString().trim().toUpperCase();
+        const valor_1 = Number(getValByName('VALOR 1', 4)) || 0;
+        const valor_venta = Number(getValByName('VENTA', 5)) || 0;
+        const pagado = Number(getValByName('PAGADO', 7)) || 0;
+        const comentario = (getValByName('COMENTARIO', 10) || '').toString().trim();
+        const obs = (getValByName('OBS', 11) || '').toString().trim();
+        const lote = (getValByName('LOTE', 12) || '').toString().trim();
 
         // Si la fila está vacía, saltar
-        if (!figura && !cliente_apodo) return;
+        if (!figura && !cliente) return;
 
         // Auto calcular
         const por_pagar = valor_venta - pagado;
@@ -260,10 +331,10 @@ app.whenReady().then(() => {
 
         newSales.push({
           id: crypto.randomUUID(),
-          fecha: fechaRaw || new Date().toISOString().split('T')[0],
+          fecha: fechaRaw || '',
           figura,
-          cliente_apodo,
-          cliente_real: '', // En el legacy no lo usaban separado
+          cliente,
+          cliente_apodo: '', // En el legacy no lo usaban separado
           valor_1,
           valor_venta,
           pagado,
@@ -285,6 +356,29 @@ app.whenReady().then(() => {
 
     } catch (error) {
       console.error('Error al importar:', error);
+      throw error;
+    }
+  });
+
+  // Guardar recibo como imagen
+  ipcMain.handle('save-receipt', async (event, dataUrl, defaultFilename) => {
+    try {
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Guardar Recibo',
+        defaultPath: defaultFilename,
+        buttonLabel: 'Guardar',
+        filters: [{ name: 'Imágenes JPG', extensions: ['jpg', 'jpeg'] }]
+      });
+
+      if (canceled || !filePath) return { success: false, canceled: true };
+
+      // Limpiar el prefijo data:image/jpeg;base64,
+      const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+      await fs.writeFile(filePath, base64Data, 'base64');
+
+      return { success: true, filePath };
+    } catch (error) {
+      console.error('Error al guardar el recibo:', error);
       throw error;
     }
   });

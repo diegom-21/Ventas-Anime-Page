@@ -26,12 +26,17 @@ export const downloadReceiptAsImage = async (elementRef, clienteApodo) => {
       pixelRatio: 2 // Para mejor resolución
     });
 
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = dataUrl;
-    link.click();
-    
-    return true;
+    if (window.electronAPI && window.electronAPI.saveReceipt) {
+      const result = await window.electronAPI.saveReceipt(dataUrl, filename);
+      return result;
+    } else {
+      // Fallback para web
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = dataUrl;
+      link.click();
+      return { success: true };
+    }
   } catch (error) {
     console.error('Error generando recibo:', error);
     throw error;
@@ -52,12 +57,17 @@ export const downloadReceiptTotalAsImage = async (elementRef, clienteApodo) => {
       pixelRatio: 2
     });
 
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = dataUrl;
-    link.click();
-    
-    return true;
+    if (window.electronAPI && window.electronAPI.saveReceipt) {
+      const result = await window.electronAPI.saveReceipt(dataUrl, filename);
+      return result;
+    } else {
+      // Fallback para web
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = dataUrl;
+      link.click();
+      return { success: true };
+    }
   } catch (error) {
     console.error('Error generando recibo total:', error);
     throw error;

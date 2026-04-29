@@ -1,11 +1,11 @@
 import React, { forwardRef } from 'react';
 import { formatCurrency } from '../../utils/calculations';
 
-export const ReceiptTotal = forwardRef(({ clientSales, clienteApodo, totals }, ref) => {
+export const ReceiptTotal = forwardRef(({ clientSales, clienteNombre, totals }, ref) => {
   if (!clientSales || clientSales.length === 0) return null;
 
-  // Tomamos el cliente_real de la descripción de la primera venta para mostrar en el recibo
-  const clienteReal = clientSales[0]?.cliente_real || '';
+  // Tomamos el cliente_apodo de la descripción de la primera venta para mostrar en el recibo
+  const clienteApodoStr = clientSales[0]?.cliente_apodo || '';
   const fechaActual = new Date().toLocaleDateString('es-CL');
 
   // Asegurar que sume 0 si no hay
@@ -34,8 +34,8 @@ export const ReceiptTotal = forwardRef(({ clientSales, clienteApodo, totals }, r
         <div className="border-t border-b border-dashed border-slate-300 py-3 mb-6 flex justify-between items-center">
           <div>
             <span className="text-slate-500 text-xs block uppercase">Cliente</span>
-            <span className="font-bold text-slate-800">{clienteReal}</span>
-            <span className="text-slate-500 text-sm ml-2">({clienteApodo})</span>
+            <span className="font-bold text-slate-800">{clienteNombre}</span>
+            {clienteApodoStr && <span className="text-slate-500 text-sm ml-2">({clienteApodoStr})</span>}
           </div>
           <div className="text-right">
             <span className="text-slate-500 text-xs block uppercase">Fecha Emisión</span>
