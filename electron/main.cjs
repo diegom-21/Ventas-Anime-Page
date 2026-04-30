@@ -99,7 +99,7 @@ app.whenReady().then(() => {
       }
 
       // 1. Mapear los datos para Excel para que se vean increíbles y entendibles
-      const mappedData = dataToExport.map(sale => {
+      const mappedData = dataToExport.map((sale, index) => {
         const venta = Number(sale.valor_venta) || 0;
         const costo = Number(sale.valor_1) || 0;
         const pagado = Number(sale.pagado) || 0;
@@ -108,24 +108,27 @@ app.whenReady().then(() => {
         const margenReal = venta - costo;
         const porPagarReal = venta - pagado;
         
-        // Formatear la fecha a DD/MM/YYYY para que sea amigable en Excel
-        let fechaAmigable = sale.fecha || '-';
+        const rowNum = index + 2; // Fila de Excel (1 es encabezado)
+
+        // Formatear la fecha como Objeto Date real para que Excel habilite los filtros por Año/Mes
+        let excelDate = sale.fecha || '';
         if (sale.fecha && sale.fecha.includes('-')) {
           const parts = sale.fecha.split('-');
           if (parts.length === 3) {
-            fechaAmigable = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            // Se establece a las 12 PM para evitar que los cambios de zona horaria resten 1 día
+            excelDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
           }
         }
 
         return {
-          'FECHA': fechaAmigable,
+          'FECHA': excelDate,
           'FIGURA': sale.figura ? sale.figura.toUpperCase() : '-',
           'CLIENTE': sale.cliente ? sale.cliente.toUpperCase() : '-',
           'VALOR 1': costo,
           'VENTA': venta,
-          'MARGEN': margenReal,
+          'MARGEN': { formula: `E${rowNum}-D${rowNum}` }, // Col E = VENTA, Col D = VALOR 1
           'PAGADO': pagado,
-          'POR PAGAR': porPagarReal,
+          'POR PAGAR': { formula: `E${rowNum}-G${rowNum}` }, // Col E = VENTA, Col G = PAGADO
           'ESTADO': sale.estado ? sale.estado.toUpperCase() : '-',
           'COMENTARIO': sale.comentario ? sale.comentario.toUpperCase() : '',
           'OBS': sale.obs ? sale.obs.toUpperCase() : '',
@@ -218,6 +221,11 @@ app.whenReady().then(() => {
           // Formato de número con decimales
           if (['VALOR 1', 'VENTA', 'MARGEN', 'PAGADO', 'POR PAGAR'].includes(colKey)) {
             cell.numFmt = '#,##0.00';
+          }
+          
+          // Formato de fecha nativo de Excel
+          if (colKey === 'FECHA') {
+            cell.numFmt = 'dd/mm/yyyy';
           }
         });
       });
